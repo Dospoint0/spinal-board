@@ -32,6 +32,14 @@ const MAX_PORT_TRIES = 50; // scan 8080..8129 before giving up
 const ROOT = path.join(__dirname, "..");
 const SERVER_ENTRY = path.join(ROOT, "scripts", "serve.mjs");
 
+// Keep the dev shell (`electron .`, unpackaged) away from the installed app:
+// both otherwise resolve the same userData dir (%APPDATA%\spinal-board) from
+// the package.json `name`, which would make them fight over the single-
+// instance lock and share localStorage/IndexedDB. Dev gets its own folder.
+if (!app.isPackaged) {
+  app.setPath("userData", path.join(app.getPath("appData"), "spinal-board-dev"));
+}
+
 let mainWindow = null;
 let serverChild = null;
 let serverPort = null;

@@ -18,6 +18,7 @@
     "cubism": "node scripts/build-cubism.mjs",
     "electron": "electron .",
     "start": "electron .",
+    "predist:win": "node esbuild.config.mjs",
     "dist:win": "electron-builder --win",
     "test": "playwright test"
   },

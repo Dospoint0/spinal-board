@@ -20,7 +20,7 @@
 import { createServer } from "node:http";
 import { readFile, stat, writeFile, unlink } from "node:fs/promises";
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { extname, join, normalize, isAbsolute } from "node:path";
+import { extname, join, normalize, isAbsolute, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { scanContentRoot } from "./scan-assets.mjs";
 import { buildPackage, exportRootDir, openInFileManager } from "./export-package.mjs";
@@ -80,7 +80,7 @@ function resolveAudioDir(urlFolder) {
     if (norm === root.url || norm.startsWith(root.url + "/")) {
       const fsDir = join(root.fs, norm.slice(root.url.length).replace(/^\/+/, ""));
       const resolved = normalize(fsDir);
-      if (resolved === root.fs || resolved.startsWith(root.fs + "/")) return fsDir;
+      if (resolved === root.fs || resolved.startsWith(root.fs + sep)) return fsDir;
     }
   }
   return null;
@@ -203,7 +203,7 @@ const server = createServer(async (req, res) => {
         return;
       }
       const fsPath = normalize(join(folder, name));
-      if (!fsPath.startsWith(folder + "/")) {
+      if (!fsPath.startsWith(folder + sep)) {
         res.writeHead(400, { "Content-Type": "application/json" }).end(
           JSON.stringify({ error: "invalid path" })
         );
@@ -283,7 +283,7 @@ const server = createServer(async (req, res) => {
         const name = String(payload.name || "");
         const base = normalize(exportRootDir());
         const target = normalize(join(base, name));
-        if (!name || !target.startsWith(base + "/")) {
+        if (!name || !target.startsWith(base + sep)) {
           res.writeHead(400, { "Content-Type": "application/json" }).end(
             JSON.stringify({ error: "invalid export name" })
           );
@@ -315,7 +315,7 @@ const server = createServer(async (req, res) => {
     if (pathname === "/cubism" || pathname.startsWith("/cubism/")) {
       fsPath = normalize(join(ROOT, "vendor", "cubism", pathname.slice("/cubism/".length)));
       const cubismRoot = join(ROOT, "vendor", "cubism");
-      if (fsPath !== cubismRoot && !fsPath.startsWith(cubismRoot + "/")) {
+      if (fsPath !== cubismRoot && !fsPath.startsWith(cubismRoot + sep)) {
         res.writeHead(403).end("Forbidden");
         return;
       }
@@ -326,7 +326,7 @@ const server = createServer(async (req, res) => {
         const contentRoot = join(CONTENT_DIR, prefix);
         const rel = firstSlash === -1 ? "" : pathname.slice(firstSlash + 1);
         fsPath = normalize(join(contentRoot, rel));
-        if (fsPath !== contentRoot && !fsPath.startsWith(contentRoot + "/")) {
+        if (fsPath !== contentRoot && !fsPath.startsWith(contentRoot + sep)) {
           res.writeHead(403).end("Forbidden");
           return;
         }

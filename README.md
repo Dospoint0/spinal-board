@@ -392,15 +392,18 @@ library.
 **Build the installer (do this on Windows 10/11):**
 
 ```bash
-npm run build          # bundles first (dist/ is packaged into the installer)
-npm run dist:win       # electron-builder → NSIS under release/
+npm run dist:win       # esbuild bundles run automatically first, then electron-builder → NSIS under release/
 ```
 
-`electron-builder` config lives in `package.json` (`"build"`): appId
-`com.spinalboard.generator`, productName **Spinal Board**, `asar: true` with
-`content`/`exports` excluded from the archive, NSIS per-user installer with a
-desktop shortcut. **No code signing / auto-update in V1** (internal-only
-distribution): Windows SmartScreen will warn — "More info → Run anyway".
+`npm run dist:win` now auto-runs the esbuild bundles before packaging — the
+packaged app.asar always contains `dist/` (a missing `dist/` used to produce a
+silently broken installer whose UI had no JavaScript: only native dropdowns
+still responded). `electron-builder` config lives in `package.json`
+(`"build"`): appId `com.spinalboard.generator`, productName **Spinal Board**,
+`asar: true` with `content`/`exports` excluded from the archive, NSIS
+per-user installer with a desktop shortcut. **No code signing / auto-update in
+V1** (internal-only distribution): Windows SmartScreen will warn — "More info
+→ Run anyway".
 
 ## Legal / licensing notes
 
