@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Spinal Board — Live Wallpaper Creator</title>
+  <link rel="stylesheet" href="style.css" />
+  <!--
+    Namespaced Spine runtimes (classic scripts, run before the module below).
+    Each bundle is a self-contained IIFE; the wrapper assigns it to
+    window.spine40 / window.spine41 so both can coexist.
+  -->
+  <script src="vendor/spine-4.0.31/spine-webgl.global.js"></script>
+  <script src="vendor/spine-4.1.56/spine-webgl.global.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- Top bar: global stage actions only (per-element settings live in the
+         right-side panel). -->
+    <header class="bar">
+      <button id="add-char-btn" type="button" class="picker-button" title="Add characters to the stage (up to 30) [A]">
+        <span>＋ Add character</span>
+        <span class="caret">▾</span>
+      </button>
+      <button id="edit-btn" type="button" class="toggle-btn" title="Edit mode: drag, resize and remove sprites [E]">Edit</button>
+      <button id="reset-edits-btn" type="button" title="Reset tint, size, position and opacity of all sprites">Reset edits</button>
+      <button id="reset-btn" type="button" title="Reset the stage to a single sprite">Reset</button>
+      <span id="character-count" class="status"></span>
+    </header>
+
+    <div id="main-row">
+      <main id="stage">
+        <canvas id="stage-canvas"></canvas>
+        <div id="guides-overlay" class="hidden" title="Target wallpaper aspect ratio"></div>
+      </main>
+
+      <!-- Right-side settings panel: shows the ACTIVE element's settings.
+           Hidden when nothing is selected (empty state) and in preview mode. -->
+      <aside id="settings-panel" aria-label="Element settings">
+        <div class="panel-header">
+          <span class="panel-title">Element settings</span>
+          <button id="panel-toggle" type="button" title="Collapse the settings panel" aria-label="Collapse panel">»</button>
+        </div>
+
+        <div id="panel-empty" class="panel-empty">
+          No element selected.<br />
+          Click a sprite on the stage to edit it.
+        </div>
+
+        <div id="panel-content" class="panel-content hidden">
+          <section class="panel-section">
+            <h3>Element</h3>
+            <label class="field">
+              <span>Character</span>
+              <button id="character-btn" type="button" class="picker-button" title="Change this element's character">
+                <span id="character-label">…</span>
+                <span class="caret">▾</span>
+              </button>
+            </label>
+          </section>
+
+          <section class="panel-section">
+            <h3>Animation</h3>
+            <label class="field">
+              <span>Variant</span>
+              <select id="variant-select"></select>
+            </label>
+            <label class="field">
+              <span>Animation</span>
+              <select id="animation-select"></select>
+            </label>
+            <label class="field">
+              <span>Click</span>
+              <select id="click-select" title="Animation that loops while holding the character"></select>
+            </label>
+            <div class="field-row">
+              <button id="play-pause-btn" type="button">Pause</button>
+              <button id="restart-btn" type="button">Restart</button>
+              <label class="field checkbox-field">
+                <input type="checkbox" id="loop-check" checked />
+                <span>Loop</span>
+              </label>
+              <label class="field">
+                <span>Speed</span>
+                <select id="speed-select"></select>
+              </label>
+            </div>
+          </section>
+
+          <section class="panel-section">
+            <h3>Transform</h3>
+            <label class="field slider-field">
+              <span>Scale</span>
+              <input type="range" id="scale-range" min="0.1" max="5" step="0.05" value="1" title="Scale the sprite (0.1–5×)" />
+              <output id="scale-value">1.00×</output>
+            </label>
+            <label class="field slider-field">
+              <span>Opacity</span>
+              <input type="range" id="opacity-range" min="0" max="100" value="100" title="Sprite transparency" />
+              <output id="opacity-value">100%</output>
+            </label>
+            <div class="field-row">
+              <label class="field">
+                <span>Tint</span>
+                <input type="color" id="tint-color" value="#ffffff" title="Sprite tint colour" />
+              </label>
+              <label class="field checkbox-field">
+                <input type="checkbox" id="mirror-check" title="Mirror the sprite horizontally" />
+                <span>Mirror</span>
+              </label>
+            </div>
+            <label class="field slider-field">
+              <span>Brightness</span>
+              <input type="range" id="brightness-range" min="0" max="200" step="1" value="100" title="Brightness of the sprite (0–200%)" />
+              <output id="brightness-value">100%</output>
+            </label>
+            <label class="field slider-field">
+              <span>Red</span>
+              <input type="range" id="color-r-range" min="0" max="200" step="1" value="100" title="Red channel multiplier of the sprite (0–200%)" />
+              <output id="color-r-value">100%</output>
+            </label>
+            <label class="field slider-field">
+              <span>Green</span>
+              <input type="range" id="color-g-range" min="0" max="200" step="1" value="100" title="Green channel multiplier of the sprite (0–200%)" />
+              <output id="color-g-value">100%</output>
+            </label>
+            <label class="field slider-field">
+              <span>Blue</span>
+              <input type="range" id="color-b-range" min="0" max="200" step="1" value="100" title="Blue channel multiplier of the sprite (0–200%)" />
+              <output id="color-b-value">100%</output>
+            </label>
+          </section>
+
+          <section class="panel-section">
+            <h3>Layer</h3>
+            <label class="field">
+              <span>Layer</span>
+              <select id="layer-select" title="Layer the active sprite belongs to"></select>
+            </label>
+          </section>
+
+          <section class="panel-section">
+            <h3 id="audio-title">Audio</h3>
+            <div class="audio-actions">
+              <button type="button" id="audio-add-btn" title="Upload a custom audio file for this element — stored next to the asset with the asset's name">Add audio…</button>
+              <input type="file" id="audio-upload" accept="audio/*,.wav,.mp3,.ogg,.m4a" hidden />
+            </div>
+            <div id="audio-custom" class="audio-custom hidden"></div>
+            <div id="audio-snippet" class="audio-snippet hidden">
+              <div class="field-row">
+                <label class="field snippet-file-field">
+                  <span>Play segment of</span>
+                  <select id="snippet-file" title="Audio file to trim into a snippet"></select>
+                </label>
+                <button type="button" id="snippet-clear" title="Play the element's audio normally instead of a trimmed snippet">Clear</button>
+              </div>
+              <div id="snippet-wave" class="snippet-wave" title="Drag the highlighted region's edges to set the snippet start/end"></div>
+              <div class="field-row">
+                <label class="field snippet-time-field">
+                  <span>Start</span>
+                  <input type="number" id="snippet-start" min="0" step="0.01" title="Snippet start (seconds)" />
+                </label>
+                <label class="field snippet-time-field">
+                  <span>End</span>
+                  <input type="number" id="snippet-end" min="0" step="0.01" title="Snippet end (seconds)" />
+                </label>
+                <button type="button" id="snippet-preview" title="Preview the trimmed snippet once">▶ Snippet</button>
+              </div>
+              <div id="snippet-hint" class="panel-hint"></div>
+            </div>
+            <div id="audio-cat-wrap" class="audio-cat-wrap hidden">
+              <div class="multiselect-actions">
+                <button type="button" data-act="all">All</button>
+                <button type="button" data-act="none">None</button>
+              </div>
+              <div id="audio-options" class="multiselect-options"></div>
+            </div>
+            <label class="field checkbox-field">
+              <input type="checkbox" id="audio-mute" />
+              <span>Mute this element</span>
+            </label>
+          </section>
+        </div>
+      </aside>
+
+      <button id="panel-open" type="button" class="panel-open" title="Open the settings panel" aria-label="Open panel">«</button>
+    </div>
+
+    <footer class="bar">
+      <div class="multiselect" id="scenes-wrap">
+        <button id="scenes-btn" type="button" title="Create, switch, rename or delete scenes (each scene keeps its own sprites, layers and background)">Scenes</button>
+        <div id="scenes-panel" class="multiselect-panel hidden">
+          <div class="multiselect-actions">
+            <button type="button" id="scenes-new" title="Create a new empty scene">New scene</button>
+          </div>
+          <div id="scenes-list" class="multiselect-options"></div>
+        </div>
+      </div>
+      <div class="multiselect" id="layers-wrap">
+        <button id="layers-btn" type="button" title="Add, rename, reorder or delete layers">Layers</button>
+        <div id="layers-panel" class="multiselect-panel hidden">
+          <div class="multiselect-actions">
+            <input id="layers-new-name" type="text" placeholder="Layer name" />
+            <button type="button" id="layers-add">Add</button>
+          </div>
+          <div id="layers-list" class="multiselect-options"></div>
+        </div>
+      </div>
+      <label class="field">
+        <span>Guides</span>
+        <select id="guides-select" title="Overlay the target wallpaper aspect ratio">
+          <option value="off" selected>Off</option>
+          <option value="16/9">16:9</option>
+          <option value="9/16">9:16</option>
+          <option value="21/9">21:9</option>
+          <option value="16/10">16:10</option>
+          <option value="4/3">4:3</option>
+          <option value="1/1">1:1</option>
+        </select>
+      </label>
+      <button id="preview-btn" type="button" class="toggle-btn" title="View the wallpaper fullscreen without the editor UI (Esc to exit) [F]">Preview</button>
+      <button id="export-btn" type="button" title="Export the current scene as a Wallpaper Engine folder package">Export</button>
+      <button id="open-folder-btn" type="button" class="toggle-btn" disabled title="Open the exported package folder in your file manager">Open folder</button>
+      <label class="field">
+        <span>Background</span>
+        <select id="background-select">
+          <option value="transparent" selected>Transparent</option>
+          <option value="#0f1115">Dark</option>
+          <option value="#ffffff">White</option>
+          <option value="custom">Custom…</option>
+          <option value="image">Image / Video…</option>
+        </select>
+      </label>
+      <input type="color" id="background-color" value="#000000" title="Custom background colour" />
+      <input type="file" id="background-file" accept="image/*,video/*,.png,.jpg,.jpeg,.webp,.webm,.gif" hidden />
+      <label class="field">
+        <span>Vol</span>
+        <input type="range" id="audio-volume" min="0" max="100" value="100" title="Global audio volume" />
+      </label>
+      <span id="status" class="status"></span>
+    </footer>
+  </div>
+
+  <div id="preview-hint" class="preview-hint hidden">Preview — press Esc to exit</div>
+
+  <!-- Asset picker window: the tab/subtab buttons and grids are generated
+       from the library folders (top-level content folders -> tabs, their
+       subfolders -> subtabs), so no catalogue-specific markup lives here. -->
+  <div id="picker" class="picker hidden" role="dialog" aria-label="Choose character">
+    <div class="picker-panel">
+      <div class="picker-header">
+        <span class="picker-title">Choose characters (up to 30)</span>
+        <div id="picker-tabs" class="picker-tabs" role="tablist"></div>
+        <input id="picker-search" type="search" placeholder="Filter…" autocomplete="off" spellcheck="false" />
+        <button id="picker-close" type="button" title="Close">✕</button>
+      </div>
+      <div id="picker-subtabs" class="picker-tabs picker-subtabs hidden"></div>
+      <div id="picker-grids"></div>
+      <div class="picker-footer">
+        <span id="picker-status"></span>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="dist/editor/editor.js"></script>
+</body>
+</html>

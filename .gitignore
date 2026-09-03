@@ -1,0 +1,83 @@
+# Live Wallpaper Generator — .gitignore
+# The repository ships code only: no content assets, no licensed Cubism runtime.
+# Rules are grouped; negation rules must stay after the patterns they re-include.
+
+# --- Node ---------------------------------------------------------------------
+node_modules/
+.npm-cache/
+.cache/
+
+# --- Logs ---------------------------------------------------------------------
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# --- Build / tooling output ----------------------------------------------------
+dist/
+out/
+build/
+*.tsbuildinfo
+
+# --- electron-builder output ----------------------------------------------------
+# NSIS installers + unpacked app dirs produced by `npm run dist:win`.
+release/
+dist-electron/
+out-electron/
+*.asar
+
+# --- Exported wallpaper packages ----------------------------------------------
+# /api/export writes one complete Wallpaper Engine package per scene. Packages
+# are reproducible artifacts (scene JSON baked in, no runtime state) — never
+# commit them. Adjust to the export root chosen in Phase 4 if it differs.
+exports/
+
+# --- Content library -----------------------------------------------------------
+# The generator scans user-configured content roots (default: content/).
+# Assets never ship with the project and are never committed.
+content/
+
+# --- Cubism runtime (licensed, user-provided) ----------------------------------
+# Cubism is NEVER committed, bundled, or redistributed. It is not an npm
+# dependency and esbuild must not bundle it. Only the folder skeleton and
+# vendor/cubism/README.md ship. Contents of Core/, Framework/ and Shaders/ are
+# ignored (the build script copies the SDK's shaders there for the dev server);
+# the skeleton stays committable via .gitkeep files.
+vendor/cubism/Core/*
+!vendor/cubism/Core/.gitkeep
+vendor/cubism/Framework/*
+!vendor/cubism/Framework/.gitkeep
+vendor/cubism/Shaders/*
+!vendor/cubism/Shaders/.gitkeep
+
+# --- Playwright ----------------------------------------------------------------
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+.pw-browsers/
+
+# --- Local test artifacts -----------------------------------------------------
+test-artifacts/
+.test-profile/
+.scratch/
+
+# --- Planning docs (local review artifacts) -------------------------------------
+# The V1 deployment plan is a working review note, not a shipped artifact.
+V1_PLAN.md
+
+# --- Editor / OS noise ----------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# --- Electron / Chromium runtime noise ------------------------------------------
+# Transient lock/socket files Chromium writes next to its user-data dir; when a
+# dev runs `npm run electron` with an unwritable $HOME they can land in the cwd.
+Singleton*
+SingletonLock
+SingletonCookie
+SingletonSocket

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wallpaper</title>
+  <link rel="stylesheet" href="style.css" />
+  <!--
+    Namespaced Spine runtimes (classic scripts, run before the module below).
+    Each bundle is a self-contained IIFE; the wrapper assigns it to
+    window.spine40 / window.spine41 so both can coexist.
+  -->
+  <script src="vendor/spine-4.0.31/spine-webgl.global.js"></script>
+  <script src="vendor/spine-4.1.56/spine-webgl.global.js"></script>
+</head>
+<body class="wallpaper">
+  <!--
+    Clean fullscreen stage: no controls, no chrome, no debug overlays.
+    This is the Wallpaper Engine entry point. It renders the designated
+    scene (the editor's saved scene, or a URL override) and preserves the
+    click/hold "on_click" behaviour.
+  -->
+  <main id="stage">
+    <canvas id="stage-canvas"></canvas>
+  </main>
+
+  <script type="module" src="dist/template/wallpaper.js"></script>
+</body>
+</html>

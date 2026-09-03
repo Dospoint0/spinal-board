@@ -1,0 +1,1092 @@
+/* Minimal, dependency-free layout for the Spine viewer. */
+
+:root {
+  --bg: #16181d;
+  --panel: #1f232b;
+  --panel-2: #262b35;
+  --text: #e8eaf0;
+  --text-dim: #9aa3b2;
+  --accent: #4f8cff;
+  --border: #333a45;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+}
+
+#app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Control bars (top and bottom) */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+  user-select: none;
+}
+
+footer.bar {
+  border-bottom: none;
+  border-top: 1px solid var(--border);
+}
+
+.field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field > span {
+  color: var(--text-dim);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+select,
+button {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+select:hover,
+button:hover {
+  border-color: var(--accent);
+}
+
+select:disabled,
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+.checkbox-field {
+  gap: 4px;
+  cursor: pointer;
+}
+
+.checkbox-field input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.status {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 45%;
+}
+
+/* Stage: one shared canvas; sprites are laid out as equal invisible
+   portions by the renderer (content may extend past its portion). */
+#main-row {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+
+#stage {
+  flex: 1 1 auto;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+/* Right-side element settings panel */
+#settings-panel {
+  flex: 0 0 300px;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.panel-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text);
+}
+
+#panel-toggle {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  line-height: 1;
+  font-size: 14px;
+  border-radius: 6px;
+  color: var(--text-dim);
+}
+
+#panel-toggle:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.panel-empty {
+  padding: 24px 16px;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.panel-content {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 4px 12px 16px;
+}
+
+.panel-content.hidden,
+.panel-empty.hidden {
+  display: none;
+}
+
+.panel-section {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-section:last-child {
+  border-bottom: none;
+}
+
+.panel-section h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.panel-section .field {
+  width: 100%;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.panel-section .field > span {
+  flex: 0 0 auto;
+}
+
+.panel-section select,
+.panel-section .picker-button {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 190px;
+}
+
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.slider-field output {
+  flex: 0 0 auto;
+  min-width: 44px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text);
+}
+
+#scale-range,
+#brightness-range,
+#color-r-range,
+#color-g-range,
+#color-b-range {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+/* Reopen tab shown when the panel is collapsed */
+.panel-open {
+  display: none;
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  z-index: 40;
+  width: 22px;
+  height: 48px;
+  padding: 0;
+  border-radius: 6px 0 0 6px;
+  border-right: none;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--panel);
+}
+
+.panel-open:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+body.panel-collapsed #settings-panel {
+  display: none;
+}
+
+body.panel-collapsed .panel-open {
+  display: block;
+}
+
+/* Custom audio list in the settings panel */
+.audio-actions {
+  margin-bottom: 6px;
+}
+
+.audio-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.audio-custom.hidden,
+.audio-cat-wrap.hidden {
+  display: none;
+}
+
+.audio-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.audio-item:hover {
+  background: var(--panel-2);
+}
+
+.audio-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.audio-play,
+.audio-remove {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  line-height: 1;
+  font-size: 12px;
+  border-radius: 4px;
+  color: var(--text-dim);
+}
+
+.audio-play:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.audio-remove:hover {
+  color: #e74c3c;
+  border-color: #c0392b;
+}
+
+#audio-options {
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+#audio-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+/* Audio snippet trim (editor only — waveform + region) */
+.audio-snippet {
+  margin-top: 6px;
+  border-top: 1px solid var(--panel-2);
+  padding-top: 6px;
+}
+
+.audio-snippet.hidden {
+  display: none;
+}
+
+.snippet-file-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#snippet-file {
+  width: 100%;
+}
+
+.snippet-wave {
+  position: relative;
+  height: 56px;
+  margin: 6px 0 4px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.snippet-time-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#snippet-start,
+#snippet-end {
+  width: 100%;
+}
+
+.panel-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+#stage-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Character picker button */
+.picker-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 140px;
+  justify-content: space-between;
+}
+
+.caret {
+  color: var(--text-dim);
+}
+
+/* Character picker window (modal) */
+.picker {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.picker.hidden {
+  display: none;
+}
+
+.picker-panel {
+  width: min(920px, 94vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+/* Character picker tabs — generated dynamically from the library folders,
+   so the header/tab rows wrap when many tabs or subtabs exist. */
+.picker-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.picker-title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Character picker tabs (built by main.js: one per content folder) */
+.picker-tabs {
+  display: inline-flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+#picker-tabs {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-height: 88px;
+  overflow-y: auto;
+}
+
+.picker-tab {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.picker-tab:hover {
+  border-color: var(--accent);
+}
+
+.picker-tab.active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--panel);
+}
+
+#picker-search {
+  flex: 1;
+  min-width: 0;
+}
+
+.picker-grid {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  min-height: 0;
+}
+
+/* Per-tab grid wrappers (#picker-grids -> .picker-tab-grids -> .picker-grid).
+   There is no global .hidden rule, so each toggled element gets one here. */
+#picker-grids {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.picker-tab-grids {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.picker-tab-grids.hidden,
+.picker-grid.hidden {
+  display: none;
+}
+
+.picker-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.12s ease, transform 0.12s ease;
+}
+
+.picker-cell:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.picker-cell.on-stage {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.picker-check {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  line-height: 20px;
+  display: none;
+  z-index: 2;
+}
+
+.picker-cell.on-stage .picker-check {
+  display: block;
+}
+
+/* Change-character mode: no ✓ badges; highlight the current character */
+.picker.change-mode .picker-check {
+  display: none;
+}
+
+.picker.change-mode .picker-cell.current-char {
+  border-color: #f0c040;
+  box-shadow: 0 0 0 1px #f0c040 inset;
+}
+
+.picker.change-mode .picker-cell.on-stage {
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.picker-thumb {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  background: #10131a;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.picker-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.picker-thumb .thumb-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.picker-thumb .thumb-placeholder.failed::after {
+  content: "⚠";
+  color: #c98a4b;
+  font-size: 18px;
+}
+
+.picker-cell .picker-name {
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker-cell .picker-variants {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.picker-footer {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+/* Edit mode */
+.toggle-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.edit-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.edit-overlay.hidden {
+  display: none;
+}
+
+.sprite-overlay {
+  position: absolute;
+  pointer-events: none;
+}
+
+.sprite-overlay.selected {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+}
+
+.sprite-x {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  line-height: 18px;
+  border-radius: 50%;
+  background: #c0392b;
+  color: #fff;
+  border: 1px solid #8a1f15;
+  font-size: 12px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.sprite-x:hover {
+  background: #e74c3c;
+}
+
+.sprite-handle {
+  position: absolute;
+  bottom: -10px;
+  right: -10px;
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  cursor: nwse-resize;
+  pointer-events: auto;
+}
+
+/* Edit mode */
+.toggle-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#opacity-range {
+  width: 90px;
+  accent-color: var(--accent);
+}
+
+.edit-overlay {
+  position: absolute;
+  pointer-events: none;
+  border: 1px dashed rgba(255, 255, 255, 0.45);
+  box-sizing: border-box;
+  z-index: 5;
+}
+
+.edit-remove {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  line-height: 1;
+  border-radius: 50%;
+  background: #c0392b;
+  color: #fff;
+  font-size: 15px;
+  pointer-events: auto;
+  z-index: 6;
+}
+
+.edit-remove:hover {
+  background: #e74c3c;
+}
+
+.edit-resize {
+  position: absolute;
+  bottom: -7px;
+  right: -7px;
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  border: 1px solid #fff;
+  border-radius: 2px;
+  cursor: nwse-resize;
+  pointer-events: auto;
+  z-index: 6;
+}
+
+/* Background video (webm) behind the stage canvas */
+.bg-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+}
+
+#stage-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 1;
+}
+
+/* Aspect-ratio guides overlay (centred box in the stage) */
+#guides-overlay {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  border: 1px dashed rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  z-index: 4;
+}
+
+#guides-overlay.hidden {
+  display: none;
+}
+
+/* Fullscreen preview: hide all editor chrome */
+body.preview .bar {
+  display: none;
+}
+
+body.preview #settings-panel,
+body.preview .panel-open {
+  display: none;
+}
+
+body.preview #preview-hint {
+  display: block;
+}
+
+body.preview .edit-overlay,
+body.preview #guides-overlay {
+  display: none;
+}
+
+.preview-hint {
+  position: fixed;
+  top: 10px;
+  right: 12px;
+  z-index: 300;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.preview-hint.hidden {
+  display: none;
+}
+
+/* Audio multi-select */
+.multiselect {
+  position: relative;
+}
+
+.multiselect-panel {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: 260px;
+  max-height: 300px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+  z-index: 50;
+  overflow: hidden;
+}
+
+.multiselect-panel.hidden {
+  display: none;
+}
+
+.multiselect-actions {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.multiselect-actions button {
+  flex: 1;
+  font-size: 12px;
+  padding: 3px 6px;
+}
+
+.multiselect-options {
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.multiselect-options label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.multiselect-options label:hover {
+  background: var(--panel);
+}
+
+.multiselect-options input {
+  accent-color: var(--accent);
+}
+
+#audio-volume {
+  width: 70px;
+  accent-color: var(--accent);
+}
+
+/* Presets */
+#presets-panel {
+  width: 280px;
+}
+
+.preset-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.preset-item:hover {
+  background: var(--panel);
+}
+
+.preset-load {
+  flex: 1;
+  text-align: left;
+  font-size: 12px;
+  padding: 3px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preset-delete {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  line-height: 1;
+  font-size: 12px;
+  border-radius: 50%;
+  color: var(--text-dim);
+}
+
+.preset-delete:hover {
+  color: #e74c3c;
+  border-color: #c0392b;
+}
+
+.presets-empty {
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 4px 6px;
+}
+
+/* Wallpaper mode (wallpaper.html): clean fullscreen stage, no chrome. */
+body.wallpaper {
+  background: #000;
+}
+
+body.wallpaper #stage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  flex: none;
+  min-height: 0;
+}
+
+body.wallpaper #stage-canvas {
+  cursor: default;
+  user-select: none;
+}
+
+/* Subtabs row (under the picker header when the active tab has subtabs) */
+.picker-subtabs {
+  flex: 0 0 auto;
+  padding: 8px 12px 0;
+}
+
+.picker-subtabs.hidden {
+  display: none;
+}
+
+/* Layers management panel */
+#layers-panel {
+  width: 280px;
+}
+
+.layer-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.layer-item:hover {
+  background: var(--panel);
+}
+
+.layer-name {
+  flex: 1;
+  text-align: left;
+  font-size: 12px;
+  padding: 3px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layer-up,
+.layer-down,
+.layer-delete {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  line-height: 1;
+  font-size: 12px;
+  border-radius: 4px;
+  color: var(--text-dim);
+}
+
+.layer-up:hover,
+.layer-down:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.layer-delete:hover {
+  color: #e74c3c;
+  border-color: #c0392b;
+}
+
+.layer-up:disabled,
+.layer-down:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Scenes management panel */
+#scenes-panel {
+  width: 300px;
+}
+
+.scene-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.scene-item:hover {
+  background: var(--panel);
+}
+
+.scene-item.active .scene-load {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.scene-load {
+  flex: 1;
+  text-align: left;
+  font-size: 12px;
+  padding: 3px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scene-rename,
+.scene-delete {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  line-height: 1;
+  font-size: 12px;
+  border-radius: 4px;
+  color: var(--text-dim);
+}
+
+.scene-rename:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.scene-delete:hover {
+  color: #e74c3c;
+  border-color: #c0392b;
+}
+
+/* Per-tab subtab grids live inside .picker-tab-grids wrappers; each grid
+   keeps the shared .picker-grid styling. */

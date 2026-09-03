@@ -1,0 +1,84 @@
+{
+  "name": "spinal-board",
+  "version": "0.2.0",
+  "private": true,
+  "author": "Spinal Board",
+  "description": "Spinal Board — live wallpaper creator with spine support: compose a live wallpaper scene from mixed animated assets and export one interactive folder for Wallpaper Engine, Lively and Octos, plus a Windows desktop app (Electron).",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "prebuild": "node scripts/build-cubism.mjs",
+    "predev": "node scripts/build-cubism.mjs",
+    "preserve": "node scripts/build-cubism.mjs",
+    "serve": "node scripts/serve.mjs",
+    "build": "node esbuild.config.mjs",
+    "dev": "node esbuild.config.mjs --watch",
+    "manifest": "node scripts/generate-manifest.mjs",
+    "vendor": "node scripts/vendor-runtimes.mjs",
+    "cubism": "node scripts/build-cubism.mjs",
+    "electron": "electron .",
+    "start": "electron .",
+    "dist:win": "electron-builder --win",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.25.5",
+    "gifuct-js": "^2.1.2",
+    "playwright": "^1.52.0",
+    "wavesurfer.js": "^7.8.14"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "build": {
+    "appId": "com.spinalboard.generator",
+    "productName": "Spinal Board",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "index.html",
+      "editor.html",
+      "wallpaper.html",
+      "style.css",
+      "scripts/**/*",
+      "dist/**/*",
+      "vendor/spine-4.0.31/**/*",
+      "vendor/spine-4.1.56/**/*",
+      "vendor/cubism/README.md",
+      "!content/**",
+      "!exports/**",
+      "!release/**",
+      "!tests/**",
+      "!.pw-browsers/**",
+      "!test-artifacts/**",
+      "!.test-profile/**",
+      "!.scratch/**"
+    ],
+    "asar": true,
+    "npmRebuild": false,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Spinal-Board-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Spinal Board"
+    }
+  }
+}
