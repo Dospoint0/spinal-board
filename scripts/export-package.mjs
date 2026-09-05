@@ -260,13 +260,17 @@ export async function buildPackage(opts) {
   }
 
   // ---- Runtime (Spine runtimes are ours; copy when the scene uses Spine) --
+  // All four supported runtimes are copied (3.7.94/3.8.95/4.0.31/4.1.56) —
+  // the bundled wallpaper runtime picks the right one from each skeleton's
+  // version header at load time, mirroring the editor.
   const spineScripts = [];
   if (spineUsed) {
-    for (const [ver, file] of [
-      ["4.0", "spine-4.0.31"],
-      ["4.1", "spine-4.1.56"],
+    for (const file of [
+      "spine-3.7.94",
+      "spine-3.8.95",
+      "spine-4.0.31",
+      "spine-4.1.56",
     ]) {
-      void ver;
       const src = join(ROOT, "vendor", file, "spine-webgl.global.js");
       const dest = join(folder, "runtime", `${file}.js`);
       copyFileSync(src, dest);
@@ -310,7 +314,8 @@ export async function buildPackage(opts) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(folderName)}</title>
   <link rel="stylesheet" href="style.css" />
-  <!-- Vendored Spine runtimes (4.0.x + 4.1.x, namespaced globals). Copied
+  <!-- Vendored Spine runtimes (3.7.x + 3.8.x + 4.0.x + 4.1.x, namespaced
+       globals; the bundle dispatches by skeleton version header). Copied
        only when the scene uses Spine. -->
 ${scriptTags}
 </head>

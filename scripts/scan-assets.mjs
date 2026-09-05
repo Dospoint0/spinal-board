@@ -50,7 +50,7 @@
  * are recorded. Variants that do not exist are simply omitted — the UI handles
  * missing variants gracefully.
  */
-import { readdirSync, statSync, existsSync } from "node:fs";
+import { readdirSync, statSync, existsSync, openSync, readSync, closeSync } from "node:fs";
 import { join } from "node:path";
 
 const isDir = (p) => statSync(p).isDirectory();
@@ -93,6 +93,46 @@ function hasPair(fsDir, stem) {
   return existsSync(join(fsDir, `${stem}.skel`)) && existsSync(join(fsDir, `${stem}.atlas`));
 }
 
+/** Read only the first bytes of a file as utf8 (cheap content sniffing). */
+function fileHead(fsPath, max = 1024) {
+  let fd;
+  try {
+    fd = openSync(fsPath, "r");
+    const buf = Buffer.alloc(max);
+    const n = readSync(fd, buf, 0, max, 0);
+    return buf.subarray(0, n).toString("utf8");
+  } catch {
+    return "";
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+/**
+ * Spine JSON skeleton pairs in a folder: `<stem>.json` + `<stem>.atlas`
+ * sitting side by side, where the .json starts with a "skeleton" block.
+ * Returns the stems. Only consulted when a folder holds no binary .skel.
+ */
+function jsonSkeletonStems(fsDir) {
+  const stems = [];
+  for (const f of entriesOf(fsDir, "files")) {
+    const lower = f.toLowerCase();
+    if (!lower.endsWith(".json")) continue;
+    const stem = f.slice(0, lower.length - 5);
+    if (!existsSync(join(fsDir, `${stem}.atlas`))) continue;
+    if (/"(skeleton|skins|bones)"/.test(fileHead(join(fsDir, f)))) stems.push(stem);
+  }
+  return stems;
+}
+
+/** True when `<stem>.json`(+`.atlas`) is a Spine JSON skeleton pair. */
+function hasJsonSkeletonPair(fsDir, stem) {
+  if (!existsSync(join(fsDir, `${stem}.atlas`))) return false;
+  const jf = join(fsDir, `${stem}.json`);
+  if (!existsSync(jf)) return false;
+  return /"(skeleton|skins|bones)"/.test(fileHead(jf));
+}
+
 /**
  * Attach custom-audio metadata to an item: audio files that sit in the same
  * folder as the asset with the asset's base name (e.g. c010_00.wav next to
@@ -127,6 +167,9 @@ function folderKind(fsDir, dirName) {
   // layout; they are recognized so their textures stay model resources.
   if (isLegacyLive2dFolder(fsDir)) return "models";
   if (hasPair(fsDir, `${dirName}_00`)) return "spineBase";
+  // Spine JSON base: a `<dirname>.json` + `.atlas` pair (game rips that ship
+  // JSON skeletons instead of binary .skel).
+  if (hasJsonSkeletonPair(fsDir, dirName)) return "spineBase";
   return "container";
 }
 
@@ -179,16 +222,26 @@ function collectUnit(fsDir, dirName, relDir, tabName, subtab, characters, warnin
 
   // Spine base folder: variant "normal" from `<name>_00.skel`, plus
   // `<v>` variants found in a subfolder `<v>/<name>_<v>_00.skel` or flat at
-  // the folder root as `<name>_<v>_00.skel`.
-  const dirStem = `${dirName}_00`;
+  // the folder root as `<name>_<v>_00.skel`. JSON bases (game rips that
+  // export `<name>.json` + `<name>.atlas`, or JSON misnamed as .skel) use the
+  // folder name as their stem — the player content-sniffs JSON vs binary.
+  const jsonBase = hasJsonSkeletonPair(fsDir, dirName);
+  const dirStem = jsonBase ? dirName : `${dirName}_00`;
   const variants = {
-    normal: { skel: `${urlBase}/${dirStem}.skel`, atlas: `${urlBase}/${dirStem}.atlas` },
+    normal: {
+      skel: `${urlBase}/${dirStem}.${jsonBase ? "json" : "skel"}`,
+      atlas: `${urlBase}/${dirStem}.atlas`,
+    },
   };
 
   for (const sub of entriesOf(fsDir, "dirs")) {
-    if (hasPair(join(fsDir, sub), `${dirName}_${sub}_00`)) {
+    const subDir = join(fsDir, sub);
+    if (hasPair(subDir, `${dirName}_${sub}_00`)) {
       const stem = `${dirName}_${sub}_00`;
       variants[sub] = { skel: `${urlBase}/${sub}/${stem}.skel`, atlas: `${urlBase}/${sub}/${stem}.atlas` };
+    } else if (hasJsonSkeletonPair(subDir, `${dirName}_${sub}`)) {
+      const stem = `${dirName}_${sub}`;
+      variants[sub] = { skel: `${urlBase}/${sub}/${stem}.json`, atlas: `${urlBase}/${sub}/${stem}.atlas` };
     }
   }
   for (const file of filesWithExt(fsDir, ".skel")) {
@@ -227,17 +280,24 @@ function idBase(idPrefix, dirName) {
  * Emit per-file items found directly in `fsDir` (media files and loose Spine
  * skeleton pairs). Audio files are attached to items, never listed alone.
  *
- * A folder that directly contains a `.skel` file is treated as a SPINE folder:
- * images/GIFs/videos there are supporting files (the texture page(s) the
- * `.atlas` references, incl. multi-page `name_2.png`, `name_3.png`, …) and are
- * NOT listed as separate items. Put standalone media in folders that contain
- * no skeletons.
+ * A folder that directly contains a `.skel` file (or a Spine JSON
+ * skeleton pair: `<stem>.json` + `<stem>.atlas` where the JSON opens with a
+ * "skeleton" block) is treated as a SPINE folder: images/GIFs/videos there are
+ * supporting files (the texture page(s) the `.atlas` references, incl.
+ * multi-page `name_2.png`, `name_3.png`, …) and are NOT listed as separate
+ * items. Put standalone media in folders that contain no skeletons.
  */
 function collectFileItems(fsDir, relDir, tabName, subtab, characters, warnings) {
   const urlBase = `${tabName}${relDir ? `/${relDir}` : ""}`;
   const idPrefix = relDir ? `${relDir}/` : "";
   const where = `${tabName}${relDir ? `/${relDir}` : ""}`;
-  const hasSkeleton = filesWithExt(fsDir, ".skel").length > 0;
+  // A folder is a SPINE folder when it holds a binary .skel OR a Spine JSON
+  // skeleton pair. JSON pairs matter only when there is no binary skeleton (a
+  // folder that HAS a .skel treats any JSON next to it as support data).
+  const skelFiles = filesWithExt(fsDir, ".skel");
+  let jsonStems = [];
+  if (!skelFiles.length) jsonStems = jsonSkeletonStems(fsDir);
+  const hasSkeleton = skelFiles.length > 0 || jsonStems.length > 0;
 
   for (const file of entriesOf(fsDir, "files")) {
     const ext = file.slice(file.lastIndexOf(".")).toLowerCase();
@@ -249,19 +309,29 @@ function collectFileItems(fsDir, relDir, tabName, subtab, characters, warnings) 
     if (hasSkeleton) {
       // Spine folder — only skeleton pairs become items below; media files
       // next to a skeleton are treated as its textures.
-      if (ext !== ".skel") continue;
-      if (!existsSync(join(fsDir, `${stem}.atlas`))) {
-        warnings.push(`${where}: atlas missing for ${file} — skipped`);
-        continue;
+      if (ext === ".skel") {
+        if (!existsSync(join(fsDir, `${stem}.atlas`))) {
+          warnings.push(`${where}: atlas missing for ${file} — skipped`);
+          continue;
+        }
+        make({
+          id: `${idPrefix}${stem}`,
+          name: stem,
+          kind: "spine",
+          tab: tabName,
+          subtab,
+          variants: { [stem]: { skel: `${urlBase}/${file}`, atlas: `${urlBase}/${stem}.atlas` } },
+        });
+      } else if (ext === ".json" && jsonStems.includes(stem)) {
+        make({
+          id: `${idPrefix}${stem}`,
+          name: stem,
+          kind: "spine",
+          tab: tabName,
+          subtab,
+          variants: { [stem]: { skel: `${urlBase}/${file}`, atlas: `${urlBase}/${stem}.atlas` } },
+        });
       }
-      make({
-        id: `${idPrefix}${stem}`,
-        name: stem,
-        kind: "spine",
-        tab: tabName,
-        subtab,
-        variants: { [stem]: { skel: `${urlBase}/${file}`, atlas: `${urlBase}/${stem}.atlas` } },
-      });
       continue;
     }
     if (IMAGE_EXTS.includes(ext)) {

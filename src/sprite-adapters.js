@@ -9,7 +9,8 @@
  * sprite media kind is added.
  *
  * Kind map (see the project brief):
- *   spine  — Spine .skel (4.0.x / 4.1.x), dispatched by runtime-loader
+ *   spine  — Spine binary .skel and JSON skeletons (3.7.x–4.1.x), format and
+ *            version sniffed from content, dispatched by runtime-loader
  *   image  — PNG/JPEG/WebP (animated WebP shows its first frame)
  *   video  — WebM/MP4, looped via a muted <video> element
  *   gif    — animated GIF, decoded by gifuct-js and played on a canvas

@@ -48,6 +48,8 @@
       "style.css",
       "scripts/**/*",
       "dist/**/*",
+      "vendor/spine-3.7.94/**/*",
+      "vendor/spine-3.8.95/**/*",
       "vendor/spine-4.0.31/**/*",
       "vendor/spine-4.1.56/**/*",
       "vendor/cubism/README.md",

@@ -62,9 +62,13 @@ function audioRoots() {
   return libraryRoots().map(({ name, fs }) => ({ fs, url: name }));
 }
 
-/** True when `name` is a direct, non-hidden content-root folder. */
+/** True when `name` is a direct, non-hidden content-root folder. Decided by
+ *  what exists on disk, NOT by a name pattern: library folders may contain
+ *  spaces or non-ASCII characters (e.g. "Seek Girl III", "Black Market",
+ *  Japanese titles), and every direct folder must be reachable. Traversal is
+ *  still blocked by the containment check at the call site. */
 function isLibraryRoot(name) {
-  if (!name || name.startsWith(".") || !/^[A-Za-z0-9_-]+$/.test(name)) return false;
+  if (!name || name.startsWith(".")) return false;
   return libraryRoots().some((r) => r.name === name);
 }
 

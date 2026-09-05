@@ -53,7 +53,7 @@ redistributed (see `.gitignore` and "Cubism — hard constraint" below).
 
 | Kind   | Formats                                      | Notes                                                                    |
 | ------ | -------------------------------------------- | ------------------------------------------------------------------------ |
-| Spine  | binary `.skel`, 4.0.x and 4.1.x              | two official runtimes (spine-webgl 4.0.31 / 4.1.56) chosen from the `.skel` header via a dispatch table; extensible, but 3.8 / 4.2 are out of scope |
+| Spine  | binary `.skel` and JSON, 3.7.x–4.1.x | four official runtimes (spine-webgl 3.7.94 / 3.8.95 / 4.0.31 / 4.1.56) chosen from the skeleton version header via a dispatch table (format + version sniffed from content); 4.2+ out of scope |
 | Live2D | **not supported** (experimental)              | Cubism 3/4/5 (`.model3.json`) renders best-effort only with a user-supplied runtime + models; Cubism 2 (`model.json`/`.moc`/`.mtn`) is not supported and is labelled as such in the picker — see "Live2D / Cubism — NOT an officially supported feature" |
 | Media  | PNG/JPEG/WebP/GIF, WebM/MP4                  | animated GIF via gifuct-js; animated WebP shows its first frame (documented limitation) |
 | Audio  | user audio files                             | per-element start/end snippet, trimmed in the editor (wavesurfer.js + Regions) and played on click/hold in the editor and the exported wallpaper |
@@ -162,8 +162,9 @@ a ready `.zip` of it (Octos installs from `.zip`):
 
 No assets ship with the project. The generator scans a user-configured content
 root (default `content/`, override with `LWPG_CONTENT`) for Spine skeletons
-(`.skel` + `.atlas`), Live2D models (`.model3.json`), images, GIFs, videos and
-audio. The dev server's `/api/manifest` rescans on every request; the bundled
+(binary `.skel` + `.atlas`, or JSON `<name>.json` + `.atlas`), Live2D models
+(`.model3.json`), images, GIFs, videos and audio. The dev server's
+`/api/manifest` rescans on every request; the bundled
 `src/manifest.js` is only the static-deployment fallback. Editor thumbnails
 render progressively on demand.
 
@@ -199,15 +200,22 @@ Where to put folders (rules):
   `.atlas` and textures in the same folder). It becomes ONE picker item with a
   "normal" variant; subfolders named like the variant (`aim/`, `cover/`) that
   hold `<folder-name>_<variant>_00.skel` become that item's variants.
-- **Flat/loose skeletons** (`whatever.skel` + `whatever.atlas`) work too —
-  each pair becomes its own item wherever it sits (e.g. a "costumes" folder
-  with one pair per costume). Their texture pages can sit next to them.
+- **JSON skeletons work too.** A folder holding `<name>.json` + `<name>.atlas`
+  (Spine's JSON export, common in game rips) is a character the same way, and
+  JSON skeletons shipped misnamed as `.skel` are detected by content sniffing
+  — the version header (3.7.x / 3.8.x / 4.0.x / 4.1.x) picks the matching
+  bundled runtime, exactly like binary skeletons.
+- **Flat/loose skeletons** (`whatever.skel` or `whatever.json` + its `.atlas`)
+  work too — each pair becomes its own item wherever it sits (e.g. a
+  "costumes" folder with one pair per costume). Their texture pages can sit
+  next to them.
 - **A Live2D model = a folder containing a `.model3.json`** → one item; the
   model's own subfolders (motions/expressions/textures/…) are resources.
 - **Standalone media** (images/GIFs/videos): each file is one item. Put them
-  in folders that contain **no `.skel` files** — any image/video next to a
-  skeleton is treated as that skeleton's texture and is NOT listed, so a
-  skeleton's `name.png`, `name_2.png`, … pages never clutter the picker.
+  in folders that contain **no skeletons** (no `.skel`, no Spine JSON pair) —
+  any image/video next to a skeleton is treated as that skeleton's texture and
+  is NOT listed, so a skeleton's `name.png`, `name_2.png`, … pages never
+  clutter the picker.
 - **Subtabs**: a tab's direct subfolders that aren't themselves single assets
   become its subtab list; anything deeper folds up into that subtab (there is
   exactly one subtab level). Want `character`/`interaction`/`cutscene` as
@@ -296,7 +304,8 @@ UI + snippet/export panels), Express/sirv, localforage/idb-keyval.
 
 ## Acceptance criteria
 
-1. Import and render Spine 4.0.x and 4.1.x, image, video, and GIF sprites.
+1. Import and render Spine 3.7.x–4.1.x (binary `.skel` and JSON), image, video,
+   and GIF sprites.
 2. Live2D is **not** a supported feature; its experimental code never ships or
    bundles a runtime, degrades cleanly when content/runtime is absent, and is
    excluded from acceptance. Legacy Cubism 2 folders are recognized but shown
@@ -323,8 +332,9 @@ UI + snippet/export panels), Express/sirv, localforage/idb-keyval.
   with `ELECTRON_RUN_AS_NODE=1` + `process.execPath`; `dist/`, `vendor/spine-*`
   and the HTML/CSS ride inside `app.asar`; `content/` + `exports/` stay outside
   (default `Documents\SpinalBoard\…`, overridable with `LWPG_*`).
-- **Cubism:** `vendor/cubism/`, user-provided, never shipped · **Spine:** 4.0.x +
-  4.1.x only (extensible, not extended now) · **UI:** vanilla.
+- **Cubism:** `vendor/cubism/`, user-provided, never shipped · **Spine:** 3.7.x +
+  3.8.x (JSON/binary via GitHub-tagged runtimes) + 4.0.x + 4.1.x (npm runtimes);
+  four namespaced runtimes dispatched by version header · **UI:** vanilla.
 - **Deferred out of V1:** looping **video export**, thumbnails/previews, code
   signing + auto-update, multi-monitor export (managers place one wallpaper per
   monitor).

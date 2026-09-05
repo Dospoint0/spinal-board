@@ -15,12 +15,19 @@
  *                    there is no automatic equal-width arrangement and no
  *                    auto re-fit when sprites are added or removed.
  *
- * Runtime selection: the bundled runtimes are spine-webgl 4.0.31
- * (window.spine40) and 4.1.56 (window.spine41); each skeleton is decoded by
- * the runtime matching its version header, and each runtime gets its own
- * SceneRenderer on the shared WebGL context.
+ * Runtime selection: the bundled runtimes are spine-webgl 3.7.94
+ * (window.spine37), 3.8.95 (window.spine38), 4.0.31 (window.spine40) and
+ * 4.1.56 (window.spine41); each skeleton — binary .skel or JSON, detected by
+ * content sniffing — is decoded by the runtime matching its version header,
+ * and each runtime gets its own SceneRenderer on the shared WebGL context.
  */
-import { detectSkeletonVersion, pickRuntime } from "./runtime-loader.js";
+import {
+  detectSkeleton,
+  pickRuntime,
+  runtimeLabelFor,
+  legacyAtlasTextureLoader,
+  attachPageTexture,
+} from "./runtime-loader.js";
 import { parseGIF, decompressFrames } from "gifuct-js";
 import { Live2DModel } from "./live2d.js";
 
@@ -94,6 +101,26 @@ function loadVideoElement(url) {
  * SpineModel
  * ------------------------------------------------------------------ */
 
+/** First non-whitespace byte (after an optional UTF-8 BOM) is '{'? */
+function looksLikeJson(bytes) {
+  const n = Math.min(bytes ? bytes.length : 0, 4);
+  for (let i = 0; i < n; i++) {
+    const b = bytes[i];
+    if (i < 3 && (b === 0xef || b === 0xbb || b === 0xbf)) continue; // BOM bytes
+    if (b === 9 || b === 10 || b === 13 || b === 32) continue; // whitespace
+    return b === 0x7b; // '{'
+  }
+  return false;
+}
+
+/** Best-effort pma flag read from the first atlas page header (the 3.x
+ *  runtimes do not parse it onto their page objects). */
+function atlasTextPma(atlasText) {
+  const head = String(atlasText || "").split(/\r?\n\r?\n/)[0];
+  const m = /^\s*pma:\s*(true|false)\s*$/im.exec(head);
+  return m ? m[1] === "true" : undefined;
+}
+
 export class SpineModel {
   constructor() {
     /** Raw WebGL context (set by the owner before load()). */
@@ -141,7 +168,12 @@ export class SpineModel {
   }
 
   get premultipliedAlpha() {
-    return this.atlas && this.atlas.pages.length ? !!this.atlas.pages[0].pma : false;
+    if (!this.atlas || !this.atlas.pages.length) return false;
+    const page = this.atlas.pages[0];
+    // 4.x pages carry a parsed `pma`; 3.x pages do not, so fall back to the
+    // value parsed from the atlas text in load().
+    if (typeof page.pma === "boolean") return page.pma;
+    return this._pmaFallback ?? false;
   }
 
   /** Load a skeleton + atlas (+ referenced textures). Requires this.gl. */
@@ -157,22 +189,31 @@ export class SpineModel {
       const skeletonBytes = new Uint8Array(await skelRes.arrayBuffer());
       const atlasText = await atlasRes.text();
 
-      const version = detectSkeletonVersion(skeletonBytes);
+      // Content sniff: .skel files are normally Spine binary, but many game
+      // folders ship JSON skeletons — sometimes misnamed with a .skel
+      // extension — so decide from the payload, not the filename.
+      const jsonText = looksLikeJson(skeletonBytes) ? new TextDecoder().decode(skeletonBytes) : null;
+      const { kind, version } = detectSkeleton(skeletonBytes, jsonText ?? "");
       const runtime = pickRuntime(version);
       if (token !== this._loadToken) return;
       if (!this.gl) throw new Error("SpineModel.gl must be set before load()");
 
       this._disposeModel();
       this.runtime = runtime;
-      this.runtimeName = version.startsWith("4.0") ? "4.0.31" : "4.1.56";
+      this.runtimeName = runtimeLabelFor(version) || version || "?";
       this._setStatus(`Parsing skeleton (Spine ${version}, runtime ${this.runtimeName})…`);
 
-      const atlas = new runtime.TextureAtlas(atlasText);
+      const atlas = new runtime.TextureAtlas(atlasText, legacyAtlasTextureLoader(runtime));
+      this._pmaFallback =
+        typeof atlas.pages?.[0]?.pma === "boolean" ? undefined : atlasTextPma(atlasText);
       await this._loadTextures(atlas, entry.atlas);
       if (token !== this._loadToken) return;
 
       const loader = new runtime.AtlasAttachmentLoader(atlas);
-      const data = new runtime.SkeletonBinary(loader).readSkeletonData(skeletonBytes);
+      const data =
+        kind === "json"
+          ? new runtime.SkeletonJson(loader).readSkeletonData(jsonText)
+          : new runtime.SkeletonBinary(loader).readSkeletonData(skeletonBytes);
       if (token !== this._loadToken) return;
 
       this.atlas = atlas;
@@ -514,9 +555,9 @@ export class SpineModel {
             image.onload = () => {
               try {
                 const texture = new this.runtime.GLTexture(this.gl, image);
-                // setTexture wires the texture onto the page AND every region
-                // (the 4.1 renderer reads region.texture, not page.texture).
-                page.setTexture(texture);
+                // Wires the texture onto the page AND (for the 3.x runtimes)
+                // every region, which the renderer reads from directly.
+                attachPageTexture(page, texture, atlas);
                 resolve();
               } catch (err) {
                 reject(err);

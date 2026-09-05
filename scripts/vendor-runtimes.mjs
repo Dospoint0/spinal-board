@@ -2,98 +2,132 @@
 /**
  * Vendor the official Esoteric Software Spine WebGL runtimes into ./vendor.
  *
- * The asset set in this project mixes two Spine binary versions:
- *   - c312 (and friends): Spine 4.0.47  -> runtime 4.0.31
- *   - c313 (and friends): Spine 4.1.20  -> runtime 4.1.56
+ * Supported skeleton versions and the runtimes that read them:
+ *   - Spine 3.7.x (JSON)               -> spine-webgl 3.7.94 (window.spine37)
+ *   - Spine 3.8.x (binary .skel, JSON) -> spine-webgl 3.8.95 (window.spine38)
+ *   - Spine 4.0.x (binary .skel)       -> spine-webgl 4.0.31 (window.spine40)
+ *   - Spine 4.1.x (binary .skel)       -> spine-webgl 4.1.56 (window.spine41)
  *
- * The 4.0 -> 4.1 binary format changed (sequence attachments + deform
- * timeline type byte) and neither runtime branches on the skeleton version,
- * so a single runtime cannot read both. This script therefore vendors both
- * runtimes and wraps each IIFE bundle in a function scope so the two `spine`
- * globals do not collide; the browser gets `window.spine40` and
- * `window.spine41`.
+ * The binary formats differ between major versions and neither runtime
+ * branches on the skeleton version, so each .skel must be decoded by the
+ * runtime matching its version header. This script therefore vendors each
+ * runtime and wraps each bundle in a function scope so the `spine` globals do
+ * not collide; the browser gets window.spine37/spine38/spine40/spine41.
+ *
+ * 4.x runtimes are fetched from npm (@esotericsoftware/spine-webgl).
+ * 3.x runtimes never shipped on npm — they are fetched from the built output
+ * committed in the official GitHub repo at the matching release tag
+ * (EsotericSoftware/spine-runtimes@3.x.yy / spine-ts/build/spine-webgl.js).
  *
  * Each vendor dir ends up with:
- *   - spine-webgl.min.js   (unmodified official bundle)
  *   - spine-webgl.global.js (wrapper -> window.spineXX)
  *   - LICENSE
  *
  * Usage: node scripts/vendor-runtimes.mjs
- * Requires network access to registry.npmjs.org.
+ * Requires network access (registry.npmjs.org + raw.githubusercontent.com).
  */
 import { execFileSync } from "node:child_process";
-import { createWriteStream, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 const RUNTIMES = [
-  { version: "4.0.31", global: "spine40" },
-  { version: "4.1.56", global: "spine41" },
+  {
+    version: "3.7.94",
+    global: "spine37",
+    source: "gh", // raw GitHub build file, not npm
+    expect: ["SkeletonJson", "TextureAtlas", "SceneRenderer", "AssetManager"],
+  },
+  {
+    version: "3.8.95",
+    global: "spine38",
+    source: "gh",
+    expect: ["SkeletonBinary", "SkeletonJson", "TextureAtlas", "SceneRenderer", "AssetManager"],
+  },
+  { version: "4.0.31", global: "spine40", source: "npm", expect: ["SkeletonBinary", "TextureAtlas", "SceneRenderer", "AssetManager"] },
+  { version: "4.1.56", global: "spine41", source: "npm", expect: ["SkeletonBinary", "TextureAtlas", "SceneRenderer", "AssetManager"] },
 ];
 
-const TARBALLS = {
+const NPM_TARBALLS = {
   core: "https://registry.npmjs.org/@esotericsoftware/spine-core/-/spine-core-%s.tgz",
   webgl: "https://registry.npmjs.org/@esotericsoftware/spine-webgl/-/spine-webgl-%s.tgz",
 };
 
-function download(url, dest) {
-  // Use curl (widely available) for simplicity.
-  execFileSync("curl", ["-fsSL", url, "-o", dest]);
+const GH_RAW = (version, file) =>
+  `https://raw.githubusercontent.com/EsotericSoftware/spine-runtimes/${version}/${file}`;
+
+/** Download a URL to a file using Node's fetch (>= 20; no curl dependency). */
+async function download(url, dest) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`download failed (HTTP ${res.status}): ${url}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  await pipeline(Readable.from(buf), (await import("node:fs")).createWriteStream(dest));
 }
 
 function extract(tgz, dir) {
   execFileSync("tar", ["xzf", tgz, "-C", dir]);
 }
 
-function build(version, globalName) {
+async function build(entry) {
+  const { version, global } = entry;
   const work = mkdtempSync(join(tmpdir(), `spine-vendor-${version}-`));
-  const coreTgz = join(work, "core.tgz");
-  const webglTgz = join(work, "webgl.tgz");
-  const coreDir = join(work, "core");
-  const webglDir = join(work, "webgl");
-  mkdirSync(coreDir);
-  mkdirSync(webglDir);
 
-  download(TARBALLS.core.replace("%s", version), coreTgz);
-  download(TARBALLS.webgl.replace("%s", version), webglTgz);
-  extract(coreTgz, coreDir);
-  extract(webglTgz, webglDir);
+  let raw, license;
+  if (entry.source === "npm") {
+    const coreTgz = join(work, "core.tgz");
+    const webglTgz = join(work, "webgl.tgz");
+    const coreDir = join(work, "core");
+    const webglDir = join(work, "webgl");
+    mkdirSync(coreDir);
+    mkdirSync(webglDir);
+    await download(NPM_TARBALLS.core.replace("%s", version), coreTgz);
+    await download(NPM_TARBALLS.webgl.replace("%s", version), webglTgz);
+    extract(coreTgz, coreDir);
+    extract(webglTgz, webglDir);
+    raw = readFileSync(join(webglDir, "package", "dist", "iife", "spine-webgl.min.js"), "utf8");
+    license = readFileSync(join(webglDir, "package", "LICENSE"), "utf8");
+  } else {
+    raw = await (await fetch(GH_RAW(version, "spine-ts/build/spine-webgl.js"))).text();
+    const licRes = await fetch(GH_RAW(version, "spine-ts/LICENSE"));
+    license = licRes.ok ? await licRes.text() : "(see Esoteric Software Spine license)";
+  }
 
-  const license = readFileSync(join(webglDir, "package", "LICENSE"), "utf8");
-  const min = readFileSync(join(webglDir, "package", "dist", "iife", "spine-webgl.min.js"), "utf8");
-
-  // Sanity check: the bundle must contain the classes we rely on.
-  for (const cls of ["SkeletonBinary", "TextureAtlas", "SceneRenderer", "AssetManager"]) {
-    if (!min.includes(cls)) throw new Error(`${version}: bundle missing ${cls}`);
+  for (const cls of entry.expect) {
+    if (!raw.includes(cls)) throw new Error(`${version}: bundle missing ${cls}`);
   }
 
   const outDir = join("vendor", `spine-${version}`);
   mkdirSync(outDir, { recursive: true });
-  writeFileSync(join(outDir, "spine-webgl.min.js"), min);
   writeFileSync(join(outDir, "LICENSE"), license);
 
-  // CSP-safe wrapper: evaluate the IIFE inside a function scope, capture the
-  // local `spine`, and publish it under the namespaced global.
+  // CSP-safe wrapper: evaluate the bundle inside a function scope, capture the
+  // local `spine`, and publish it under the namespaced global. The 3.x bundles
+  // keep their WebGL classes (SceneRenderer, GLTexture, OrthoCamera,
+  // ResizeMode, …) in a `spine.webgl` namespace; hoist them so the player code
+  // can use the same root-level API as the 4.x runtimes.
   const wrapper = `/* Auto-generated by scripts/vendor-runtimes.mjs — do not edit. */
 /* Spine Runtimes ${version} (see LICENSE in this directory). */
 (function () {
-  /* begin spine-webgl.min.js (unmodified) */
-${min
+  /* begin spine-webgl.${entry.source === "npm" ? "min.js" : "js"} (unmodified) */
+${raw
   .split("\n")
   .map((l) => "  " + l)
   .join("\n")}
-  /* end spine-webgl.min.js */
-  window.${globalName} = spine;
+  /* end spine-webgl bundle */
+  if (spine && spine.webgl) {
+    for (var _k in spine.webgl) if (!(_k in spine)) spine[_k] = spine.webgl[_k];
+  }
+  window.${global} = spine;
 })();
 `;
   writeFileSync(join(outDir, "spine-webgl.global.js"), wrapper);
 
   rmSync(work, { recursive: true, force: true });
-  console.log(`vendored spine-${version} -> vendor/spine-${version}/ (global window.${globalName})`);
+  console.log(`vendored spine-${version} -> vendor/spine-${version}/ (global window.${global})`);
 }
 
-for (const { version, global } of RUNTIMES) build(version, global);
+for (const entry of RUNTIMES) await build(entry);
 console.log("done");
