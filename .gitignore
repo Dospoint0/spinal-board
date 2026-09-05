@@ -61,6 +61,7 @@ playwright/.cache/
 test-artifacts/
 .test-profile/
 .scratch/
+.test-content-folder/
 
 # --- Planning docs (local review artifacts) -------------------------------------
 # The V1 deployment plan is a working review note, not a shipped artifact.

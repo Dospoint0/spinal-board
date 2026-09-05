@@ -223,7 +223,7 @@
         </select>
       </label>
       <button id="preview-btn" type="button" class="toggle-btn" title="View the wallpaper fullscreen without the editor UI (Esc to exit) [F]">Preview</button>
-      <button id="export-btn" type="button" title="Export the current scene as a Wallpaper Engine folder package">Export</button>
+      <button id="export-btn" type="button" title="Export the current scene as a Wallpaper Engine / Octos folder package">Export</button>
       <button id="open-folder-btn" type="button" class="toggle-btn" disabled title="Open the exported package folder in your file manager">Open folder</button>
       <label class="field">
         <span>Background</span>
@@ -249,14 +249,26 @@
 
   <!-- Asset picker window: the tab/subtab buttons and grids are generated
        from the library folders (top-level content folders -> tabs, their
-       subfolders -> subtabs), so no catalogue-specific markup lives here. -->
+       subfolders -> subtabs), so no catalogue-specific markup lives here.
+       The tab/subtab strips stay on one/two lines and scroll horizontally
+       when there are more folders than fit. -->
   <div id="picker" class="picker hidden" role="dialog" aria-label="Choose character">
     <div class="picker-panel">
       <div class="picker-header">
-        <span class="picker-title">Choose characters (up to 30)</span>
+        <div class="picker-header-row">
+          <span class="picker-title">Choose characters (up to 30)</span>
+          <input id="picker-search" type="search" placeholder="Filter…" autocomplete="off" spellcheck="false" />
+          <button id="picker-folder-btn" type="button" class="picker-folder-btn" title="Change which content library folder this picker reads from">Library folder…</button>
+          <button id="picker-close" type="button" title="Close">✕</button>
+        </div>
         <div id="picker-tabs" class="picker-tabs" role="tablist"></div>
-        <input id="picker-search" type="search" placeholder="Filter…" autocomplete="off" spellcheck="false" />
-        <button id="picker-close" type="button" title="Close">✕</button>
+      </div>
+      <div id="picker-folder-row" class="picker-folder-row hidden">
+        <label for="picker-folder-input">Content folder</label>
+        <input id="picker-folder-input" type="text" autocomplete="off" spellcheck="false" placeholder="Absolute path to a folder of assets (each direct subfolder becomes a tab)" />
+        <button id="picker-folder-apply" type="button" title="Use this folder as the content library">Use folder</button>
+        <button id="picker-folder-reset" type="button" title="Back to the default content library">Default</button>
+        <span id="picker-folder-status" class="picker-folder-status"></span>
       </div>
       <div id="picker-subtabs" class="picker-tabs picker-subtabs hidden"></div>
       <div id="picker-grids"></div>

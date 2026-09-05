@@ -1,9 +1,11 @@
 /**
  * Export round-trip (V1): the editor exports the current scene via
  * /api/export; the resulting package is checked on disk — ONE combined folder
- * for Wallpaper Engine (project.json), Lively (LivelyInfo.json) and Octos
- * (octos.json) plus a ready .zip — and then LOADED and rendered as a fully
- * static wallpaper (no editor, no API, no localStorage).
+ * for Wallpaper Engine (project.json) and Octos (octos.json) plus a ready
+ * .zip — and then LOADED and rendered as a fully static wallpaper (no editor,
+ * no API, no localStorage). Lively metadata is intentionally NOT shipped
+ * (Lively writes its own LivelyInfo.json when a wallpaper folder is added), so
+ * the package must NOT contain LivelyInfo.json.
  */
 import { test, expect } from "playwright/test";
 import { existsSync, readdirSync, statSync, rmSync, readFileSync } from "node:fs";
@@ -19,7 +21,7 @@ function newestExport() {
     .sort((a, b) => statSync(join(EXPORTS, b)).mtimeMs - statSync(join(EXPORTS, a)).mtimeMs)[0];
 }
 
-test("exports one combined folder (WE + Lively + Octos) + .zip that plays back statically", async ({ page }) => {
+test("exports one combined folder (WE + Octos) + .zip that plays back statically", async ({ page }) => {
   await bootEditor(page);
   // Deterministic scene: default spine sprite + an image sprite + colour bg.
   await evalIn(page, `window.__spineViewer.addSprite("samples/sample.png"); true`);
@@ -49,11 +51,14 @@ test("exports one combined folder (WE + Lively + Octos) + .zip that plays back s
   const root = join(EXPORTS, folder);
   const rel = (p) => join(root, p);
 
-  // Combined package structure: ONE canonical entry (index.html) + the three
-  // managers' metadata + a ready Octos .zip next to the folder.
-  for (const f of ["index.html", "wallpaper.js", "style.css", "project.json", "LivelyInfo.json", "octos.json", "cubism/README.md"]) {
+  // Combined package structure: ONE canonical entry (index.html) + the WE and
+  // Octos metadata + a ready Octos .zip next to the folder.
+  for (const f of ["index.html", "wallpaper.js", "style.css", "project.json", "octos.json", "cubism/README.md"]) {
     expect(existsSync(rel(f)), `${f} missing`).toBe(true);
   }
+  // No LivelyInfo.json: Lively generates its own when a wallpaper folder is
+  // imported, so the export must not ship (or fight over) that file.
+  expect(existsSync(rel("LivelyInfo.json")), "LivelyInfo.json should NOT be generated").toBe(false);
   // The old Wallpaper-Engine-only entry name is gone.
   expect(existsSync(rel("wallpaper.html")), "wallpaper.html should be renamed to index.html").toBe(false);
 
@@ -77,15 +82,6 @@ test("exports one combined folder (WE + Lively + Octos) + .zip that plays back s
   const project = JSON.parse(readFileSync(rel("project.json"), "utf8"));
   expect(project.file).toBe("index.html");
   expect(project.type).toBe("web");
-
-  // LivelyInfo.json: Type "web" + FileName index.html + Title/Desc/Author
-  // (field names mirror Lively's LivelyInfoModel.cs).
-  const lively = JSON.parse(readFileSync(rel("LivelyInfo.json"), "utf8"));
-  expect(lively.Type).toBe("web");
-  expect(lively.FileName).toBe("index.html");
-  expect(lively.Title).toBe(folder);
-  expect(typeof lively.Desc).toBe("string");
-  expect(typeof lively.Author).toBe("string");
 
   // octos.json: entry index.html.
   const octos = JSON.parse(readFileSync(rel("octos.json"), "utf8"));

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
  * export-package.mjs — builds ONE self-contained interactive wallpaper folder
- * usable by all three wallpaper managers (Wallpaper Engine, Lively, Octos).
+ * usable by Wallpaper Engine and Octos out of the box, and by Lively via its
+ * own import (Lively writes its LivelyInfo.json itself when a wallpaper folder
+ * is added, so none is generated here).
  *
  * The output package is fully offline and static:
  *   - index.html is the canonical entry (the scene — sprites, layers,
@@ -17,10 +19,9 @@
  *     runtimes — copied, never linked from the repo);
  *   - cubism/ ships EMPTY with instructions (the licensed Cubism runtime is
  *     user-provided, never distributed) — Live2D sprites degrade gracefully;
- *   - one folder, three managers' metadata, all pointing at index.html:
- *       project.json    — Wallpaper Engine (type "web", file "index.html")
- *       LivelyInfo.json — Lively (Type "web", FileName "index.html")
- *       octos.json      — Octos (entry "index.html")
+ *   - one folder, the managers' metadata, all pointing at index.html:
+ *       project.json — Wallpaper Engine (type "web", file "index.html")
+ *       octos.json   — Octos (entry "index.html")
  *     plus a ready <name>.zip of the folder (Octos installs from .zip).
  *
  * The dev server exposes this as POST /api/export (see serve.mjs); the module
@@ -300,10 +301,11 @@ export async function buildPackage(opts) {
   bytes += bakedJson.length;
 
   // ---- index.html (canonical entry, scene baked inline) ------------------
-  // index.html is the ONE entry all three managers load (Wallpaper Engine via
-  // project.json.file, Lively via LivelyInfo.json.FileName, Octos via
-  // octos.json.entry or its index.html auto-detection). Relative wallpaper.js
-  // / runtime/* script paths stay unchanged.
+  // index.html is the ONE entry the managers load (Wallpaper Engine via
+  // project.json.file, Octos via octos.json.entry or its index.html auto-
+  // detection; Lively auto-detects the same folder on import and writes its
+  // own LivelyInfo.json, so this package ships no Lively metadata file).
+  // Relative wallpaper.js / runtime/* script paths stay unchanged.
   const scriptTags = spineScripts
     .map((s) => `  <script src="runtime/${s}"></script>`)
     .join("\n");
@@ -376,17 +378,11 @@ ${scriptTags}
   };
   writeFileSync(join(folder, "project.json"), JSON.stringify(project, null, 2));
 
-  // ---- LivelyInfo.json (Lively web wallpaper) ----------------------------
-  // Keys mirror Lively's LivelyInfoModel.cs — note the model's short "Desc"
-  // property name. Type is the WallpaperType enum serialized as a string.
-  const livelyInfo = {
-    Title: folderName,
-    Desc: "Interactive live wallpaper exported by Spinal Board (click/hold + audio).",
-    Author: "Spinal Board",
-    FileName: "index.html",
-    Type: "web",
-  };
-  writeFileSync(join(folder, "LivelyInfo.json"), JSON.stringify(livelyInfo, null, 2));
+  // ---- LivelyInfo.json: intentionally NOT written -------------------------
+  // Lively writes its own LivelyInfo.json (Type "web", FileName "index.html")
+  // when a wallpaper folder is imported/added, so shipping one here is
+  // redundant and can conflict with the copy Lively manages. The exported
+  // folder is a plain index.html wallpaper and works in Lively unchanged.
 
   // ---- octos.json (Octos mod metadata) -----------------------------------
   // Octos mods are a folder with an (optional) octos.json; entry points at the

@@ -84,8 +84,12 @@ function resolveUserDirs() {
         "GIFs, videos and audio. Every DIRECT folder under this one becomes a",
         "picker tab in the editor (e.g. put a folder named `characters` here).",
         "",
-        "Nothing is ever distributed: exports copy only the files a scene",
-        "references. See the app's documentation for the full folder rules.",
+        "You can also point the editor at another library folder from the",
+        "Add character picker (\"Library folder…\"): type/paste the absolute",
+        "path of a folder whose subfolders hold assets — the choice is",
+        "remembered for the next launch. Nothing here is ever distributed:",
+        "exports copy only the files a scene references. See the app's",
+        "documentation for the full folder rules.",
         "",
       ].join("\n")
     );

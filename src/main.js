@@ -17,8 +17,14 @@ import { SPEEDS } from "./spine-player.js";
 import { saveAudioUpload, deleteAudioUpload, listAudioUploads } from "./audio.js";
 import { SnippetWaveform } from "./audio-snippet-editor.js";
 
-// Dynamic manifest: prefers the dev server's /api/manifest (scans the content
-// folders on every request), falls back to the bundled src/manifest.js.
+// The picker's "content folder" control remembers its choice under this key;
+// it is re-applied to the server on every boot BEFORE the manifest is fetched
+// so the library reflects the folder the user last chose.
+const CONTENT_FOLDER_KEY = "lwpg.contentRoot";
+
+// Dynamic manifest: prefers the dev server's /api/manifest (scans the current
+// content root on every request), falls back to the bundled src/manifest.js.
+await applyPersistedContentRoot();
 const CHARACTERS = await loadCharacters();
 
 // The picker's tabs/subtabs are generated from the library folders each asset
@@ -152,6 +158,15 @@ const pickerSubtabs = $("picker-subtabs");
 const pickerGrids = $("picker-grids");
 const pickerStatus = $("picker-status");
 const pickerClose = $("picker-close");
+
+// Content-folder control (the picker can repoint the library at another
+// folder at runtime; the server root is switched via /api/content).
+const pickerFolderBtn = $("picker-folder-btn");
+const pickerFolderRow = $("picker-folder-row");
+const pickerFolderInput = $("picker-folder-input");
+const pickerFolderApply = $("picker-folder-apply");
+const pickerFolderReset = $("picker-folder-reset");
+const pickerFolderStatus = $("picker-folder-status");
 
 const charactersById = scene.charactersById;
 
@@ -1100,6 +1115,7 @@ function buildPicker() {
       buildPickerGrid(grid, view.chars, tab.name, view.key == null ? "" : view.key);
     }
   }
+  fitPickerStrips();
 }
 
 /** Show the active tab + subtab view; keep search/filter/thumbnails/status
@@ -1168,6 +1184,7 @@ function applyPickerView() {
   } else {
     pickerStatus.textContent = `${chars.length} characters`;
   }
+  fitPickerStrips();
 }
 
 /** Switch to a tab by its PICKER_TABS index, resetting to its first view. */
@@ -1176,6 +1193,18 @@ function setActiveTabIndex(idx) {
   activeTabIdx = idx;
   activeViewIdx = 0;
   applyPickerView();
+}
+
+/** Tabs/subtabs: the strips wrap onto up to two rows by default (CSS); when a
+ *  strip would need more rows than fit, it is switched (.scroll) to ONE line
+ *  that scrolls horizontally, so a huge number of folders never clips or eats
+ *  the panel's height. Re-run whenever the strips change or the window
+ *  resizes. */
+function fitPickerStrips() {
+  for (const el of [pickerTabs, pickerSubtabs]) {
+    if (!el || el.clientHeight <= 0) continue; // hidden — measured when shown
+    el.classList.toggle("scroll", el.scrollHeight > el.clientHeight + 1);
+  }
 }
 
 /** Switch to a tab by its folder name. */
@@ -1206,6 +1235,7 @@ function openPicker(mode = "add") {
   picker.classList.toggle("change-mode", pickerMode === "change");
   picker.classList.remove("hidden");
   pickerSearch.value = "";
+  pickerFolderRow.classList.add("hidden"); // fresh open: collapsed folder row
   // Re-apply the current tab/view (falling back to the first if the library
   // changed between opens).
   if (activeTabIdx >= PICKER_TABS.length) activeTabIdx = 0;
@@ -1218,6 +1248,173 @@ function closePicker() {
   pickerMode = "add";
   picker.classList.remove("change-mode");
   picker.classList.add("hidden");
+}
+
+/* ------------------------------------------------------------------ *
+ * Content-folder control (runtime switch of the library root)
+ *
+ * GET/POST /api/content reports/switches the server's content root. The last
+ * folder chosen here is remembered in localStorage and re-applied on boot
+ * (applyPersistedContentRoot, above the manifest fetch) so a chosen library
+ * survives restarts. Switching changes the whole library: the page reloads
+ * and any on-stage characters that no longer exist are dropped.
+ * ------------------------------------------------------------------ */
+
+/** Load the current + default content dirs into the folder row's input. */
+async function refreshFolderRow() {
+  pickerFolderStatus.textContent = "";
+  try {
+    const res = await fetch("api/content", { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    pickerFolderInput.value = data.dir || "";
+    pickerFolderInput.title = `Default: ${data.defaultDir || ""}`;
+  } catch (err) {
+    pickerFolderStatus.textContent = `Cannot read the content folder (${err.message}).`;
+  }
+}
+
+function setFolderBusy(busy) {
+  pickerFolderApply.disabled = busy;
+  pickerFolderReset.disabled = busy;
+}
+
+/** Apply the typed folder: switch the server root, remember it, reload. */
+async function applyContentFolder() {
+  const dir = pickerFolderInput.value.trim();
+  if (pickerFolderApply.disabled) return;
+  if (!dir) {
+    pickerFolderStatus.textContent = "Enter the folder path (or press Default).";
+    return;
+  }
+  setFolderBusy(true);
+  pickerFolderStatus.textContent = "";
+  try {
+    const previous = await currentContentDir();
+    // Ask the server first: an invalid folder yields an error with no reload.
+    const res = await fetch("api/content", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dir }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || !data.ok) {
+      pickerFolderStatus.textContent = `Cannot use that folder: ${(data && data.error) || `HTTP ${res.status}`}`;
+      return;
+    }
+    if (!previous || data.dir === previous) {
+      pickerFolderStatus.textContent = `Already using ${data.dir}`;
+      return;
+    }
+    if (
+      !window.confirm(`Switch the content library to:\n\n${data.dir}\n\nThe editor reloads and any characters not present in this folder are removed from the stage.`)
+    ) {
+      // Revert the switch we just made so the app keeps showing the old library.
+      try {
+        await fetch("api/content", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dir: previous }),
+        });
+      } catch {}
+      return;
+    }
+    try {
+      localStorage.setItem(CONTENT_FOLDER_KEY, data.dir);
+    } catch {}
+    location.reload();
+  } catch (err) {
+    pickerFolderStatus.textContent = `Failed: ${err.message}`;
+  } finally {
+    setFolderBusy(false);
+  }
+}
+
+async function currentContentDir() {
+  try {
+    const res = await fetch("api/content", { cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      return data.dir || "";
+    }
+  } catch {}
+  return "";
+}
+
+/** Back to the default content folder (env/launch default); reload. */
+async function resetContentFolder() {
+  if (pickerFolderReset.disabled) return;
+  setFolderBusy(true);
+  pickerFolderStatus.textContent = "";
+  try {
+    const previous = await currentContentDir();
+    const res = await fetch("api/content", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dir: "" }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || !data.ok) {
+      pickerFolderStatus.textContent = `Reset failed: ${(data && data.error) || `HTTP ${res.status}`}`;
+      return;
+    }
+    if (!previous || data.dir === previous) {
+      pickerFolderStatus.textContent = `Already using the default folder (${data.dir})`;
+      return;
+    }
+    if (
+      !window.confirm(`Reset the content library to the default folder:\n\n${data.dir}\n\nThe editor reloads and any characters not present in this folder are removed from the stage.`)
+    ) {
+      // Revert the reset so the app keeps showing the current library.
+      try {
+        await fetch("api/content", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dir: previous }),
+        });
+      } catch {}
+      return;
+    }
+    try {
+      localStorage.removeItem(CONTENT_FOLDER_KEY);
+    } catch {}
+    location.reload();
+  } catch (err) {
+    pickerFolderStatus.textContent = `Reset failed: ${err.message}`;
+  } finally {
+    setFolderBusy(false);
+  }
+}
+
+/** On boot: point the server at the remembered content folder (if any) so the
+ *  manifest/picker describe the library the user last chose. A no-op when
+ *  nothing was remembered or when there is no /api/content (static hosting). */
+async function applyPersistedContentRoot() {
+  let stored = null;
+  try {
+    stored = localStorage.getItem(CONTENT_FOLDER_KEY);
+  } catch {}
+  if (!stored) return;
+  try {
+    const res = await fetch("api/content", { cache: "no-store" });
+    if (!res.ok) return; // static deployment — leave localStorage alone
+    const cur = await res.json();
+    if (cur && cur.dir === stored) return; // already applied
+    const apply = await fetch("api/content", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dir: stored }),
+    });
+    const data = await apply.json().catch(() => null);
+    if (!apply.ok || !data || !data.ok) {
+      // The remembered folder is gone — drop it and keep the server default.
+      try {
+        localStorage.removeItem(CONTENT_FOLDER_KEY);
+      } catch {}
+    }
+  } catch {
+    // No server reachable — keep the remembered choice for the next run.
+  }
 }
 
 /** Change the ACTIVE sprite's character to the picked one. The sprite's
@@ -1642,7 +1839,8 @@ function bgBlobInfo(blob) {
 }
 
 /** Export the current scene via the dev server into the combined
- *  Wallpaper-Engine/Lively/Octos folder package (+ .zip), then offer/perform
+ *  Wallpaper-Engine/Octos folder package (+ .zip; Lively writes its own
+ *  LivelyInfo.json on import), then offer/perform
  *  the open-folder step. */
 async function exportCurrentScene() {
   const rec = getCurrentSceneRec();
@@ -1886,6 +2084,38 @@ function wireEvents() {
     if (ev.target === picker) closePicker();
   });
   pickerSearch.addEventListener("input", () => filterGrid(pickerSearch.value));
+
+  // Content-folder control: toggle the folder row, apply/reset the root.
+  pickerFolderBtn.addEventListener("click", async () => {
+    const show = pickerFolderRow.classList.contains("hidden");
+    pickerFolderRow.classList.toggle("hidden", !show);
+    if (show) {
+      await refreshFolderRow();
+      pickerFolderInput.focus();
+    }
+  });
+  pickerFolderApply.addEventListener("click", applyContentFolder);
+  pickerFolderReset.addEventListener("click", resetContentFolder);
+  pickerFolderInput.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      applyContentFolder();
+    }
+  });
+  // Scroll the tab/subtab strips horizontally with the wheel when they are in
+  // their horizontal-scroll mode (nothing to translate -> default behaviour).
+  for (const strip of [pickerTabs, pickerSubtabs]) {
+    strip.addEventListener(
+      "wheel",
+      (ev) => {
+        if (ev.deltaY && strip.scrollWidth > strip.clientWidth) {
+          strip.scrollLeft += ev.deltaY;
+          ev.preventDefault();
+        }
+      },
+      { passive: false }
+    );
+  }
   // Listen on window (not document) so synthetic keydown dispatches on
   // window also reach the handler (real input bubbles to both).
   window.addEventListener("keydown", onKeyDown);
@@ -2167,8 +2397,9 @@ function wireEvents() {
   // Guides + preview.
   guidesSelect.addEventListener("change", applyGuides);
   previewBtn.addEventListener("click", () => setPreview(!document.body.classList.contains("preview")));
-  // Export: current scene -> one combined folder (Wallpaper Engine + Lively +
-  // Octos metadata) + a .zip for Octos, then offer/perform the open-folder step.
+  // Export: current scene -> one combined folder (Wallpaper Engine + Octos
+  // metadata; Lively generates its own LivelyInfo.json on import) + a .zip for
+  // Octos, then offer/perform the open-folder step.
   exportBtn.addEventListener("click", exportCurrentScene);
   openFolderBtn.addEventListener("click", () => {
     if (lastExportName) openExportedFolder(lastExportName);
@@ -2207,6 +2438,7 @@ function wireEvents() {
     scene.stageRenderer.resize();
     updateGuidesOverlay();
     updateEditOverlays();
+    fitPickerStrips();
   };
   window.addEventListener("resize", resizeHandler);
   const stageObserver = new ResizeObserver(resizeHandler);
@@ -2327,6 +2559,8 @@ initScenes().then(() => {
 
 // Debug / automation handle (used by the e2e test; harmless in production).
 window.__spineViewer = {
+  // Unique per page load — lets tests wait until a reloaded document is live.
+  bootId: Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
   CHARACTERS,
   thumbnailer,
   picker,
@@ -2399,6 +2633,26 @@ window.__spineViewer = {
     rename: (id, name) => scene.renameLayer(id, name),
     reorder: (id, index) => scene.reorderLayer(id, index),
     setSprite: (spriteId, layerId) => scene.setSpriteLayer(spriteId, layerId),
+  },
+  content: {
+    /** Current + default content dirs ({ dir, defaultDir }) or null. */
+    get: () =>
+      fetch("api/content", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+    /** Switch the server content root; resolves to the result dir on success
+     *  or an error string. Does NOT reload — callers decide. */
+    set: async (dir) => {
+      try {
+        const r = await fetch("api/content", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dir }),
+        });
+        const d = await r.json().catch(() => null);
+        return r.ok && d && d.ok ? d : (d && d.error) || `HTTP ${r.status}`;
+      } catch (err) {
+        return String(err && err.message ? err.message : err);
+      }
+    },
   },
   guides: {
     set: (v) => {

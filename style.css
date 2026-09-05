@@ -447,35 +447,117 @@ body.panel-collapsed .panel-open {
   overflow: hidden;
 }
 
-/* Character picker tabs — generated dynamically from the library folders,
-   so the header/tab rows wrap when many tabs or subtabs exist. */
+/* Character picker tabs — generated dynamically from the library folders.
+   The header keeps title/search/actions on one row, with the tab strip on a
+   full-width line beneath it; the subtab strip sits below the header.
+   Each strip wraps folders onto up to two rows; when a strip would need more
+   rows than that, main.js adds .scroll and the strip becomes ONE line that
+   scrolls horizontally (thin scrollbar), so any number of tabs/subtabs stays
+   reachable without clipping or eating the panel's height. */
 .picker-header {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 10px 12px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 8px;
   border-bottom: 1px solid var(--border);
   flex: 0 0 auto;
+  min-width: 0;
+}
+
+.picker-header-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .picker-title {
   font-weight: 600;
   color: var(--text);
-}
-
-/* Character picker tabs (built by main.js: one per content folder) */
-.picker-tabs {
-  display: inline-flex;
-  gap: 4px;
   flex: 0 0 auto;
 }
 
-#picker-tabs {
+/* Folder control next to the search box. */
+.picker-folder-btn {
+  flex: 0 0 auto;
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+/* Content-folder row (revealed by the "Library folder…" button). */
+.picker-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.picker-folder-row label {
+  color: var(--text-dim);
+  flex: 0 0 auto;
+}
+
+#picker-folder-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 5px 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+#picker-folder-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.picker-folder-status {
+  color: var(--text-dim);
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Character picker tabs (built by main.js: one per content folder). Shared by
+   the tab strip (#picker-tabs) and the subtab strip (#picker-subtabs). */
+.picker-tabs {
+  width: 100%;
+  min-width: 0;
+  display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
-  max-height: 88px;
-  overflow-y: auto;
+  align-content: flex-start;
+  gap: 4px 6px;
+  /* Two rows of ~27px tabs + the row gap. */
+  max-height: 62px;
+  overflow: hidden;
+}
+
+.picker-tabs.scroll {
+  flex-wrap: nowrap;
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 3px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.picker-tabs::-webkit-scrollbar {
+  height: 6px;
+}
+
+.picker-tabs::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.picker-tabs::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .picker-tab {
@@ -486,6 +568,8 @@ body.panel-collapsed .panel-open {
   border: 1px solid var(--border);
   color: var(--text-dim);
   cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .picker-tab:hover {
@@ -970,7 +1054,7 @@ body.wallpaper #stage-canvas {
 /* Subtabs row (under the picker header when the active tab has subtabs) */
 .picker-subtabs {
   flex: 0 0 auto;
-  padding: 8px 12px 0;
+  padding: 2px 12px 8px;
 }
 
 .picker-subtabs.hidden {

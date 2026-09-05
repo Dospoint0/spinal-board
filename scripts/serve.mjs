@@ -16,6 +16,12 @@
  * … — anything a user adds works the same). Set LWPG_CONTENT to point the
  * content root elsewhere (e.g. a sibling library folder). Hidden folders
  * (names starting with ".") are ignored.
+ *
+ * The content root can also be switched at RUNTIME from the editor's picker:
+ * GET /api/content returns the current root, POST /api/content { dir } points
+ * the root at another folder (an empty dir resets to the default/LWPG_CONTENT).
+ * The renderer remembers the choice and re-applies it on the next load, so
+ * this server holds only the session value.
  */
 import { createServer } from "node:http";
 import { readFile, stat, writeFile, unlink } from "node:fs/promises";
@@ -38,8 +44,32 @@ function resolveEnvDir(name, fallback) {
   return v && v.trim() ? (isAbsolute(v) ? v : join(ROOT, v)) : join(ROOT, fallback);
 }
 
-/** Content root: default ./content, overridable with LWPG_CONTENT. */
-const CONTENT_DIR = resolveEnvDir("LWPG_CONTENT", "content");
+/** Content root: default ./content, overridable with LWPG_CONTENT (resolved
+ *  once, then swappable at runtime via POST /api/content). */
+function defaultContentDir() {
+  return resolveEnvDir("LWPG_CONTENT", "content");
+}
+let CONTENT_DIR = defaultContentDir();
+
+/**
+ * Resolve a runtime content-folder request to an absolute directory.
+ * - Empty/whitespace -> the default (reset).
+ * - Absolute path -> used verbatim (must exist and be a directory).
+ * - Relative path  -> resolved against the repo root (mirrors LWPG_CONTENT).
+ * Leading/trailing quotes (pasted from Explorer) are stripped.
+ * Returns null when the folder does not exist / is not a directory.
+ */
+function resolveLibraryDir(value) {
+  const raw = String(value ?? "").trim().replace(/^["']|["']$/g, "");
+  if (!raw) return defaultContentDir();
+  const resolved = isAbsolute(raw) ? normalize(raw) : normalize(join(ROOT, raw));
+  try {
+    if (statSync(resolved).isDirectory()) return resolved;
+  } catch {
+    /* not a directory / missing */
+  }
+  return null;
+}
 
 /** Top-level content folders (picker tabs), as { name, fs } pairs. */
 function libraryRoots() {
@@ -237,10 +267,43 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    // Content root: report the current library folder (GET) or point it at
+    // another folder (POST { dir }; empty/absent resets to the default). This
+    // is what the picker's content-folder control drives.
+    if (pathname === "/api/content") {
+      if (req.method === "GET") {
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ dir: CONTENT_DIR, defaultDir: defaultContentDir() }));
+        return;
+      }
+      if (req.method === "POST") {
+        try {
+          const body = await readBody(req, 8 * 1024);
+          const payload = JSON.parse(body.toString("utf8") || "{}");
+          const target = resolveLibraryDir(payload.dir);
+          if (!target) {
+            res.writeHead(400, { "Content-Type": "application/json" }).end(
+              JSON.stringify({ error: `not a folder: ${String(payload.dir ?? "").trim() || "(empty)"}` })
+            );
+            return;
+          }
+          CONTENT_DIR = target;
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ ok: true, dir: CONTENT_DIR, defaultDir: defaultContentDir() }));
+        } catch (err) {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(
+            JSON.stringify({ error: `cannot change content folder: ${err.message}` })
+          );
+        }
+        return;
+      }
+    }
+
     // Export: POST { name, scene, bgFile? } — writes a complete, self-
-    // contained interactive wallpaper folder usable by Wallpaper Engine,
-    // Lively and Octos (+ a ready .zip for Octos) under the export root
-    // (exports/ by default; override with LWPG_EXPORTS).
+    // contained interactive wallpaper folder usable by Wallpaper Engine and
+    // Octos (+ a ready .zip for Octos) under the export root (exports/ by
+    // default; override with LWPG_EXPORTS). The package is copied from the
+    // CURRENT content root (a runtime-switched library exports as-is).
     if (pathname === "/api/export" && req.method === "POST") {
       const MAX_EXPORT_BYTES = 120 * 1024 * 1024;
       try {
@@ -262,7 +325,7 @@ const server = createServer(async (req, res) => {
             data: Buffer.from(payload.bgFile.data, "base64"),
           };
         }
-        const report = await buildPackage({ name, scene, bgFile });
+        const report = await buildPackage({ name, scene, bgFile, contentDir: CONTENT_DIR });
         res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
         res.end(
           JSON.stringify({
